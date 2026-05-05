@@ -1,0 +1,31 @@
+# Environment & secrets
+.env
+*.env
+
+# Virtual environment
+llmenv/
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Database
+detections.db
+
+# Cloned external repo (not our code)
+ai-engineering-hub/
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

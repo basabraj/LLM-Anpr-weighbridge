@@ -1,0 +1,14 @@
+# Web server & API
+fastapi==0.136.1
+uvicorn[standard]==0.46.0
+
+# LLM OCR via Groq cloud (free tier)
+groq==1.2.0
+
+# Image processing
+Pillow==12.2.0
+numpy==2.4.4
+
+# System dependencies (install separately):
+#   sudo apt install python3-gi python3-gst-1.0 gstreamer1.0-plugins-good
+#   sudo apt install gstreamer1.0-plugins-bad gstreamer1.0-libav

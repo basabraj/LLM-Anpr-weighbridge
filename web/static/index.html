@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ANPR Weighbridge — Control Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:       #0d0f14;
+    --surface:  #161922;
+    --surface2: #1e2230;
+    --border:   #2a2f3f;
+    --green:    #00e676;
+    --green-d:  #00b85c;
+    --amber:    #ffab00;
+    --red:      #ff4444;
+    --blue:     #4da6ff;
+    --text:     #e8ecf4;
+    --muted:    #6b7394;
+    --mono:     'IBM Plex Mono', monospace;
+    --sans:     'IBM Plex Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--green);
+  }
+  .logo-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .status-pill {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+  }
+  .status-pill .dot { width:6px; height:6px; border-radius:50%; background:var(--muted); }
+  .status-pill.ok .dot { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .status-pill.warn .dot { background:var(--amber); box-shadow:0 0 6px var(--amber); }
+  .status-pill.err .dot { background:var(--red); box-shadow:0 0 6px var(--red); }
+
+  /* ── Layout ── */
+  main {
+    display: grid;
+    grid-template-columns: 480px 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Camera panel ── */
+  .camera-panel {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+
+  /* ── Camera feed ── */
+  .camera-feed {
+    position: relative;
+    background: #000;
+    aspect-ratio: 16/9;
+    overflow: hidden;
+    cursor: crosshair;
+    flex-shrink: 0;
+  }
+  #cam-img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+    transform-origin: 50% 50%;
+    transform: scale(1);
+    transition: transform 0.25s ease;
+    pointer-events: none;
+  }
+  .cam-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.6);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+  .cam-badge {
+    position: absolute;
+    top: 8px; left: 8px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: var(--green);
+    background: rgba(0,230,118,0.1);
+    border: 1px solid rgba(0,230,118,0.3);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+  .cam-fps {
+    position: absolute;
+    bottom: 8px; right: 8px;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+  }
+
+  /* zoom crosshair dot */
+  .zoom-crosshair {
+    position: absolute;
+    width: 16px; height: 16px;
+    border: 2px solid var(--green);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    display: none;
+    box-shadow: 0 0 6px var(--green);
+  }
+
+  /* ── Zoom controls ── */
+  .zoom-bar {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    flex-shrink: 0;
+  }
+  .zoom-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding: 0 12px;
+    border-right: 1px solid var(--border);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+  }
+  .zoom-btn {
+    flex: 1;
+    padding: 7px 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .zoom-btn:last-child { border-right: none; }
+  .zoom-btn:hover { color: var(--green); background: rgba(0,230,118,0.06); }
+  .zoom-btn.z-active {
+    color: #000;
+    background: var(--green);
+  }
+  .zoom-hint {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    padding: 4px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+
+  /* ── Last plate display ── */
+  .last-plate {
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .plate-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .plate-number {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    color: var(--green);
+    line-height: 1;
+    min-height: 32px;
+    transition: all 0.2s;
+  }
+  .plate-meta {
+    display: flex; gap: 16px; margin-top: 6px;
+  }
+  .plate-meta span {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .plate-meta .val { color: var(--text); }
+
+  /* ── Weight display ── */
+  .weight-panel {
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .weight-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+  }
+  .weight-box .wlabel {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .weight-box .wval {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1.2;
+    margin-top: 2px;
+  }
+  .weight-box .wval.net { color: var(--amber); }
+  .weight-box .wunit {
+    font-size: 10px;
+    color: var(--muted);
+    margin-left: 2px;
+  }
+
+  /* ── KPI row ── */
+  .kpi-row {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .kpi {
+    flex: 1;
+    padding: 14px 20px;
+    border-right: 1px solid var(--border);
+  }
+  .kpi:last-child { border-right: none; }
+  .kpi-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .kpi-val {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1;
+  }
+  .kpi-val.green { color: var(--green); }
+  .kpi-val.amber { color: var(--amber); }
+
+  /* ── Detection log ── */
+  .log-panel {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .log-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .search-box {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 5px 10px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-box:focus { border-color: var(--green); }
+  .search-box::placeholder { color: var(--muted); }
+
+  .btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    padding: 5px 12px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:hover { border-color: var(--green); color: var(--green); }
+  .btn.active { background: var(--green); color: #000; border-color: var(--green); }
+
+  /* ── Table ── */
+  .table-wrap {
+    flex: 1;
+    overflow-y: auto;
+  }
+  .table-wrap::-webkit-scrollbar { width: 4px; }
+  .table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    text-align: left;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0;
+    background: var(--surface);
+    font-weight: 400;
+  }
+  tbody tr {
+    border-bottom: 1px solid rgba(42,47,63,0.5);
+    transition: background 0.1s;
+    cursor: pointer;
+  }
+  tbody tr:hover { background: var(--surface2); }
+  tbody tr.new-row { animation: flashRow 1.2s ease-out; }
+  @keyframes flashRow {
+    0% { background: rgba(0,230,118,0.15); }
+    100% { background: transparent; }
+  }
+  td {
+    padding: 9px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    vertical-align: middle;
+  }
+  td.plate-cell {
+    font-weight: 500;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--green);
+  }
+  td.muted { color: var(--muted); }
+
+  .conf-bar { display: flex; align-items: center; gap: 6px; }
+  .conf-track {
+    width: 48px; height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .conf-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--green);
+    transition: width 0.3s;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    font-family: var(--mono);
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+  .badge.ok   { background: rgba(0,230,118,0.12); color: var(--green); border: 1px solid rgba(0,230,118,0.25); }
+  .badge.err  { background: rgba(255,68,68,0.12);  color: var(--red);   border: 1px solid rgba(255,68,68,0.25); }
+  .badge.warn { background: rgba(255,171,0,0.12);  color: var(--amber); border: 1px solid rgba(255,171,0,0.25); }
+
+  /* ── Config drawer ── */
+  .config-sidebar {
+    display: none;
+    position: fixed;
+    top: 52px; right: 0; bottom: 0;
+    width: 320px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 100;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .config-sidebar.open { display: flex; flex-direction: column; }
+  .cfg-section { padding: 16px; border-bottom: 1px solid var(--border); }
+  .cfg-title {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .cfg-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .cfg-row label { font-size: 12px; color: var(--text); }
+  .cfg-input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 4px 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    width: 120px;
+    outline: none;
+  }
+  .cfg-input:focus { border-color: var(--green); }
+  .toggle {
+    width: 32px; height: 18px;
+    background: var(--border);
+    border-radius: 9px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .toggle.on { background: var(--green); }
+  .toggle::after {
+    content:'';
+    position: absolute;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    top: 3px; left: 3px;
+    transition: left 0.2s;
+  }
+  .toggle.on::after { left: 17px; }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--green);
+    color: var(--green);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 10px 16px;
+    border-radius: 4px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: all 0.3s;
+    z-index: 200;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    ANPR·WEIGHBRIDGE·v1.0
+  </div>
+  <div class="status-bar">
+    <div class="status-pill ok" id="cam-status"><div class="dot"></div>RTSP</div>
+    <div class="status-pill ok" id="mb-status"><div class="dot"></div>MODBUS</div>
+    <div class="status-pill ok" id="ws-status"><div class="dot"></div>WS</div>
+    <div style="color:var(--text);font-family:var(--mono);font-size:11px;" id="clock"></div>
+    <button class="btn" onclick="toggleConfig()">⚙ CONFIG</button>
+  </div>
+</header>
+
+<main>
+  <!-- Camera panel -->
+  <div class="camera-panel">
+    <div class="panel-header">
+      <span>LIVE FEED</span>
+      <span id="frame-counter">F:0</span>
+    </div>
+
+    <!-- Camera feed with click-to-focus -->
+    <div class="camera-feed" id="camera-feed" onclick="setZoomOrigin(event)">
+      <img id="cam-img" src="/api/stream" alt="Camera feed"
+           onerror="this.style.display='none'; document.getElementById('cam-overlay').style.display='flex'">
+      <div class="cam-badge" id="rec-badge">● REC</div>
+      <div class="cam-fps" id="fps-badge">— fps</div>
+      <div class="cam-overlay" id="cam-overlay" style="display:none;">NO SIGNAL</div>
+      <div class="zoom-crosshair" id="zoom-crosshair"></div>
+    </div>
+
+    <!-- Zoom control bar -->
+    <div class="zoom-bar">
+      <span class="zoom-label">⌕ ZOOM</span>
+      <button class="zoom-btn z-active" id="z1" onclick="setZoom(1)">1×</button>
+      <button class="zoom-btn" id="z2" onclick="setZoom(2)">2×</button>
+      <button class="zoom-btn" id="z3" onclick="setZoom(3)">3×</button>
+      <button class="zoom-btn" id="z4" onclick="setZoom(4)">4×</button>
+      <button class="zoom-btn" id="z5" onclick="setZoom(5)">5×</button>
+    </div>
+    <div class="zoom-hint">Click on feed to set zoom focus point</div>
+
+    <div class="last-plate">
+      <div class="plate-label">LAST DETECTED PLATE</div>
+      <div class="plate-number" id="last-plate">—</div>
+      <div class="plate-meta">
+        <span>CONF <span class="val" id="last-conf">—</span></span>
+        <span>TIME <span class="val" id="last-time">—</span></span>
+      </div>
+    </div>
+
+    <div class="weight-panel">
+      <div class="weight-box">
+        <div class="wlabel">GROSS</div>
+        <div class="wval" id="w-gross">—<span class="wunit">kg</span></div>
+      </div>
+      <div class="weight-box">
+        <div class="wlabel">TARE</div>
+        <div class="wval" id="w-tare">—<span class="wunit">kg</span></div>
+      </div>
+      <div class="weight-box">
+        <div class="wlabel">NET</div>
+        <div class="wval net" id="w-net">—<span class="wunit">kg</span></div>
+      </div>
+    </div>
+
+    <div class="panel-header" style="margin-top:auto;">
+      <span>MODBUS STATUS</span>
+      <span id="mb-last">—</span>
+    </div>
+    <div style="padding:10px 14px; font-family:var(--mono); font-size:10px; color:var(--muted); line-height:1.8;">
+      <div>PORT <span style="color:var(--text)" id="mb-port">—</span></div>
+      <div>SLAVE <span style="color:var(--text)" id="mb-slave">—</span></div>
+      <div>LAST TX <span style="color:var(--text)" id="mb-tx">—</span></div>
+    </div>
+  </div>
+
+  <!-- KPI row -->
+  <div class="kpi-row">
+    <div class="kpi">
+      <div class="kpi-label">TODAY</div>
+      <div class="kpi-val green" id="kpi-today">0</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">TOTAL</div>
+      <div class="kpi-val" id="kpi-total">0</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">UNIQUE / DAY</div>
+      <div class="kpi-val" id="kpi-unique">0</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">OPEN WEIGHINGS</div>
+      <div class="kpi-val amber" id="kpi-open">0</div>
+    </div>
+  </div>
+
+  <!-- Detection log -->
+  <div class="log-panel">
+    <div class="log-toolbar">
+      <input class="search-box" id="search" placeholder="Search plate…" oninput="filterTable()">
+      <button class="btn active" id="btn-live" onclick="toggleLive()">● LIVE</button>
+      <button class="btn" onclick="exportCSV()">↓ CSV</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>PLATE</th>
+            <th>CONFIDENCE</th>
+            <th>GROSS</th>
+            <th>NET</th>
+            <th>TIME</th>
+            <th>MODBUS</th>
+            <th>WEBHOOK</th>
+          </tr>
+        </thead>
+        <tbody id="det-tbody">
+          <tr><td colspan="7" class="muted" style="text-align:center;padding:32px;">Connecting…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Config sidebar -->
+<div class="config-sidebar" id="config-sidebar">
+  <div class="cfg-section">
+    <div class="cfg-title">Camera</div>
+    <div class="cfg-row"><label>RTSP URL</label><input class="cfg-input" id="cfg-rtsp" placeholder="rtsp://…"></div>
+    <div class="cfg-row"><label>Frame skip</label><input class="cfg-input" id="cfg-skip" type="number" value="2" min="1" max="10"></div>
+  </div>
+  <div class="cfg-section">
+    <div class="cfg-title">Detection</div>
+    <div class="cfg-row"><label>YOLO threshold</label><input class="cfg-input" id="cfg-yolo-conf" type="number" step="0.05" value="0.40"></div>
+    <div class="cfg-row"><label>OCR threshold</label><input class="cfg-input" id="cfg-ocr-conf" type="number" step="0.05" value="0.40"></div>
+    <div class="cfg-row"><label>Confirm frames</label><input class="cfg-input" id="cfg-frames" type="number" value="3" min="1"></div>
+    <div class="cfg-row"><label>Cooldown (s)</label><input class="cfg-input" id="cfg-cool" type="number" value="30" min="5"></div>
+  </div>
+  <div class="cfg-section">
+    <div class="cfg-title">Modbus</div>
+    <div class="cfg-row"><label>Enabled</label><div class="toggle on" id="tog-modbus" onclick="this.classList.toggle('on')"></div></div>
+    <div class="cfg-row"><label>Port</label><input class="cfg-input" id="cfg-mb-port" placeholder="/dev/ttyUSB0"></div>
+    <div class="cfg-row"><label>Slave ID</label><input class="cfg-input" id="cfg-mb-slave" type="number" value="1"></div>
+  </div>
+  <div class="cfg-section">
+    <div class="cfg-title">Webhook</div>
+    <div class="cfg-row"><label>Enabled</label><div class="toggle" id="tog-webhook" onclick="this.classList.toggle('on')"></div></div>
+    <div class="cfg-row"><label>URL</label><input class="cfg-input" id="cfg-wh-url" placeholder="https://…"></div>
+  </div>
+  <div style="padding:16px;">
+    <button class="btn" style="width:100%;justify-content:center;" onclick="saveConfig()">SAVE CONFIG</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+let detections = [];
+let liveMode = true;
+let ws = null;
+let frameCount = 0;
+
+// ── Zoom state ─────────────────────────────────────────────
+let currentZoom = 1;
+let zoomOriginX = 50; // % from left
+let zoomOriginY = 50; // % from top
+
+function setZoom(level) {
+  currentZoom = level;
+
+  // Update button styles
+  [1,2,3,4,5].forEach(n => {
+    document.getElementById('z' + n).classList.toggle('z-active', n === level);
+  });
+
+  applyZoom();
+  showToast(level === 1 ? 'Zoom reset to 1×' : `Zoom ${level}× — click feed to reposition`);
+}
+
+function setZoomOrigin(e) {
+  if (currentZoom === 1) return;
+  const feed = document.getElementById('camera-feed');
+  const rect = feed.getBoundingClientRect();
+  zoomOriginX = ((e.clientX - rect.left) / rect.width)  * 100;
+  zoomOriginY = ((e.clientY - rect.top)  / rect.height) * 100;
+
+  // Show crosshair dot
+  const dot = document.getElementById('zoom-crosshair');
+  dot.style.left = zoomOriginX + '%';
+  dot.style.top  = zoomOriginY + '%';
+  dot.style.display = 'block';
+  clearTimeout(dot._timer);
+  dot._timer = setTimeout(() => dot.style.display = 'none', 1200);
+
+  applyZoom();
+}
+
+function applyZoom() {
+  const img = document.getElementById('cam-img');
+  img.style.transformOrigin = `${zoomOriginX}% ${zoomOriginY}%`;
+  img.style.transform = `scale(${currentZoom})`;
+}
+
+// ── Clock ──────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleDateString('en-IN') + ' ' + now.toTimeString().slice(0,8);
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── WebSocket ──────────────────────────────────────────────
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/live`);
+
+  ws.onopen  = () => { setStatus('ws-status', 'ok');  showToast('WebSocket connected'); };
+  ws.onclose = () => { setStatus('ws-status', 'err'); setTimeout(connectWS, 3000); };
+  ws.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'detection') onDetection(msg.data);
+  };
+}
+
+function onDetection(d) {
+  frameCount++;
+  document.getElementById('frame-counter').textContent = 'F:' + frameCount;
+  document.getElementById('last-plate').textContent = d.plate;
+  document.getElementById('last-conf').textContent  = d.confidence + '%';
+  document.getElementById('last-time').textContent  =
+    new Date(d.detected_at + 'Z').toLocaleTimeString('en-IN', {hour12: false});
+
+  document.getElementById('w-gross').innerHTML = (d.gross_weight ?? '—') + '<span class="wunit">kg</span>';
+  document.getElementById('w-net').innerHTML   = (d.net_weight   ?? '—') + '<span class="wunit">kg</span>';
+  document.getElementById('mb-tx').textContent = new Date().toTimeString().slice(0,8);
+
+  detections.unshift(d);
+  if (detections.length > 500) detections.pop();
+  if (liveMode) renderTable();
+}
+
+function renderTable(data) {
+  const rows   = data || detections;
+  const search = document.getElementById('search').value.toLowerCase();
+  const filtered = search ? rows.filter(d => d.plate.toLowerCase().includes(search)) : rows;
+
+  const tbody = document.getElementById('det-tbody');
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="muted" style="text-align:center;padding:24px;">No detections</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.slice(0, 200).map((d, i) => `
+    <tr class="${i === 0 && liveMode ? 'new-row' : ''}">
+      <td class="plate-cell">${d.plate}</td>
+      <td>
+        <div class="conf-bar">
+          <div class="conf-track"><div class="conf-fill" style="width:${d.confidence}%"></div></div>
+          <span>${typeof d.confidence === 'number' ? d.confidence.toFixed(1) : d.confidence}%</span>
+        </div>
+      </td>
+      <td>${d.gross_weight != null ? d.gross_weight + ' kg' : '<span class="muted">—</span>'}</td>
+      <td>${d.net_weight  != null ? d.net_weight  + ' kg' : '<span class="muted">—</span>'}</td>
+      <td class="muted">${new Date(d.detected_at + 'Z').toLocaleTimeString('en-IN', {hour12:false})}</td>
+      <td>${d.modbus_sent !== undefined ? (d.modbus_sent ? '<span class="badge ok">OK</span>' : '<span class="badge err">FAIL</span>') : '<span class="muted">—</span>'}</td>
+      <td>${d.webhook_sent !== undefined ? (d.webhook_sent ? '<span class="badge ok">OK</span>' : '<span class="badge warn">—</span>') : '<span class="muted">—</span>'}</td>
+    </tr>
+  `).join('');
+}
+
+function filterTable() { renderTable(); }
+
+function toggleLive() {
+  liveMode = !liveMode;
+  const btn = document.getElementById('btn-live');
+  btn.classList.toggle('active', liveMode);
+  btn.textContent = liveMode ? '● LIVE' : '○ PAUSED';
+}
+
+async function loadStats() {
+  try {
+    const r = await fetch('/api/stats');
+    const s = await r.json();
+    document.getElementById('kpi-today').textContent  = s.today_detections;
+    document.getElementById('kpi-total').textContent  = s.total_detections;
+    document.getElementById('kpi-unique').textContent = s.unique_plates_today;
+    document.getElementById('kpi-open').textContent   = s.open_weigh_events;
+    if (s.last_plate) {
+      document.getElementById('last-plate').textContent = s.last_plate;
+      document.getElementById('last-time').textContent  =
+        new Date(s.last_detected_at + 'Z').toLocaleTimeString('en-IN', {hour12:false});
+    }
+  } catch(e) {}
+}
+
+async function loadHistory() {
+  try {
+    const r    = await fetch('/api/detections?limit=100');
+    const data = await r.json();
+    detections = data.map(d => ({ ...d, confidence: Math.round(d.confidence * 100) }));
+    renderTable();
+    document.getElementById('det-tbody').querySelector('tr')?.classList.remove('new-row');
+  } catch(e) {
+    document.getElementById('det-tbody').innerHTML =
+      '<tr><td colspan="7" class="muted" style="text-align:center;padding:24px;">API offline — start server</td></tr>';
+  }
+}
+
+function setStatus(id, state) {
+  document.getElementById(id).className = 'status-pill ' + state;
+}
+
+function toggleConfig() {
+  document.getElementById('config-sidebar').classList.toggle('open');
+}
+function saveConfig() {
+  showToast('Config saved (restart required)');
+  document.getElementById('config-sidebar').classList.remove('open');
+}
+
+function exportCSV() {
+  const rows = [['plate','confidence','gross_weight','net_weight','detected_at']];
+  detections.forEach(d => rows.push([d.plate, d.confidence, d.gross_weight, d.net_weight, d.detected_at]));
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = 'anpr_' + Date.now() + '.csv';
+  a.click();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// Init
+loadStats();
+loadHistory();
+connectWS();
+setInterval(loadStats, 30000);
+
+document.getElementById('cam-img').onload = () => {
+  setStatus('cam-status', 'ok');
+  document.getElementById('cam-overlay').style.display = 'none';
+  document.getElementById('cam-img').style.display = 'block';
+};
+</script>
+</body>
+</html>
