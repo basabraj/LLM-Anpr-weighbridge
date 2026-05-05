@@ -1,6 +1,6 @@
 # LLM-Anpr-weighbridge
 
-AI-powered ANPR system for weighbridge automation. Captures live H265 RTSP camera feed via GStreamer on Raspberry Pi, extracts vehicle license plates using LLaMA vision (Groq API), and displays real-time detections on a live dashboard with WebSocket updates, MJPEG stream, and SQLite logging.
+Automatic License Plate Recognition system for weighbridge automation.It Captures live H265 RTSP camera feed via GStreamer on Raspberry Pi, extracts vehicle license plates using LLaMA vision (Groq API), and displays real-time detections on a live dashboard with WebSocket updates, MJPEG stream, and SQLite logging.
 
 ## Architecture
 
