@@ -15,9 +15,6 @@ __pycache__/
 # Database
 detections.db
 
-# Cloned external repo (not our code)
-ai-engineering-hub/
-
 # IDE
 .vscode/
 *.swp
